@@ -1,0 +1,34 @@
+# LeWM Curiosity-Driven RL Framework
+# Core dependencies
+
+# Deep Learning
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Tensor manipulation
+einops>=0.7.0
+
+# RL Environments
+gymnasium>=0.29.0
+minigrid>=2.3.0          # Sparse-reward navigation environments
+
+# Vision Transformers (for ViT encoder variant)
+transformers>=4.35.0
+
+# Config management
+pyyaml>=6.0
+
+# Numerical computing
+numpy>=1.24.0
+
+# Plotting
+matplotlib>=3.7.0
+
+# Experiment tracking (optional)
+wandb>=0.16.0            # Optional: set use_wandb: true in config
+
+# Image processing (optional, for ResizeObservation)
+opencv-python>=4.8.0     # OR: Pillow>=10.0.0
+
+# Development / testing
+pytest>=7.4.0

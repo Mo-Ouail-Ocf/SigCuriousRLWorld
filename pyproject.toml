@@ -1,0 +1,27 @@
+[project]
+name = "offline-online-jepa-rl"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "h5py>=3.16.0",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.3",
+    "scikit-learn>=1.8.0",
+    "seaborn>=0.13.2",
+    "torch>=2.5.1",
+    "torchaudio>=2.5.1",
+    "torchvision>=0.20.1",
+    "tqdm>=4.67.3",
+]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128" }]
+torchaudio = [{ index = "pytorch-cu128" }]
+torchvision = [{ index = "pytorch-cu128" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

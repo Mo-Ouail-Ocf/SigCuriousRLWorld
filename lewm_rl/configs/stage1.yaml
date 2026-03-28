@@ -1,0 +1,73 @@
+# ============================================================
+# Stage 1: LeWM as Intrinsic Reward ONLY
+# ============================================================
+# Setup:
+#   - RL agent uses CNN on raw pixels
+#   - LeWM is DETACHED from RL loss (trained separately)
+#   - r_total = r_env + lambda * ||z_hat_{t+1} - z_{t+1}||^2
+#
+# Goal:
+#   - Prove stable curiosity vs. RND / ICM
+#   - Better exploration in sparse-reward environments
+# ============================================================
+
+stage: stage1
+
+device: auto  # "cuda", "cpu", or "auto"
+seed: 42
+
+env:
+  id: "MiniGrid-Empty-8x8-v0"
+  image_size: 64
+  grayscale: false
+  frame_stack: 1
+
+agent:
+  type: ppo_cnn
+  lr: 3.0e-4
+  hidden_dim: 256
+  n_epochs: 4
+  batch_size: 64
+  clip_eps: 0.2
+  gamma: 0.99
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  ent_coef: 0.01
+  max_grad_norm: 0.5
+
+lewm:
+  encoder_type: cnn          # "cnn" (fast) or "vit" (paper)
+  latent_dim: 256
+  in_channels: 3
+  image_size: 64
+  action_dim: 1              # will be overridden by factory
+  history_size: 3
+  lambda_reg: 0.1            # SIGReg weight (the one effective hyperparameter)
+  sigreg_num_proj: 512       # M projections (1024 in paper; 512 for speed)
+  sigreg_knots: 17           # quadrature nodes
+  predictor_depth: 4         # 6 in paper; 4 for speed
+  predictor_heads: 8
+  predictor_hidden_dim: 512
+  predictor_mlp_dim: 1024
+  predictor_dropout: 0.1     # important! see paper ablation
+
+intrinsic_reward:
+  lambda_int: 0.01           # λ_RL — scale of intrinsic reward
+  normalize: true            # normalize with running mean/std
+
+training:
+  total_steps: 500000
+  rollout_steps: 2048        # steps per PPO update
+  lewm_lr: 3.0e-4
+  lewm_weight_decay: 1.0e-5
+  lewm_batch_size: 32
+  lewm_traj_len: 8           # trajectory length for LeWM training
+  lewm_update_freq: 1        # update LeWM every N steps
+  lewm_warmup_steps: 5000    # random exploration before RL
+  buffer_capacity: 100000
+  checkpoint_freq: 50000
+  eval_freq: 10000
+  log_dir: results/logs
+  use_wandb: false
+  wandb_project: lewm-rl
+  save_dir: results/checkpoints

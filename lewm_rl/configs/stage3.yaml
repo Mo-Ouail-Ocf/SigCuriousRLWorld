@@ -1,0 +1,73 @@
+# ============================================================
+# Stage 3: FULL MODEL — Latent Representation + Intrinsic Reward
+# ============================================================
+# Setup:
+#   - Policy receives z_t as input (structured representation)
+#   - Intrinsic reward from LeWM prediction error
+#   - LeWM trained jointly (shared encoder with policy)
+#
+# Goal:
+#   - Show combined performance boost (synergy)
+#   - Best overall exploration + sample efficiency
+# ============================================================
+
+stage: stage3
+
+device: auto
+seed: 42
+
+env:
+  id: "MiniGrid-Empty-8x8-v0"
+  image_size: 64
+  grayscale: false
+  frame_stack: 1
+
+agent:
+  type: ppo_latent
+  lr: 3.0e-4
+  hidden_dim: 256
+  n_epochs: 4
+  batch_size: 64
+  clip_eps: 0.2
+  gamma: 0.99
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  ent_coef: 0.01
+  max_grad_norm: 0.5
+
+lewm:
+  encoder_type: cnn
+  latent_dim: 256
+  in_channels: 3
+  image_size: 64
+  action_dim: 1
+  history_size: 3
+  lambda_reg: 0.1
+  sigreg_num_proj: 512
+  sigreg_knots: 17
+  predictor_depth: 4
+  predictor_heads: 8
+  predictor_hidden_dim: 512
+  predictor_mlp_dim: 1024
+  predictor_dropout: 0.1
+
+intrinsic_reward:
+  lambda_int: 0.01
+  normalize: true
+
+training:
+  total_steps: 500000
+  rollout_steps: 2048
+  lewm_lr: 3.0e-4
+  lewm_weight_decay: 1.0e-5
+  lewm_batch_size: 32
+  lewm_traj_len: 8
+  lewm_update_freq: 1
+  lewm_warmup_steps: 5000
+  buffer_capacity: 100000
+  checkpoint_freq: 50000
+  eval_freq: 10000
+  log_dir: results/logs
+  use_wandb: false
+  wandb_project: lewm-rl
+  save_dir: results/checkpoints
