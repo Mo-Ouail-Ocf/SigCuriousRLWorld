@@ -81,7 +81,7 @@ def build_stage(config: dict, stage: str | None = None) -> Trainer:
 
     # ---- Action space ----
     if hasattr(env.action_space, "n"):
-        action_dim = 1
+        action_dim = env.action_space.n
         continuous = False
         act_dim_lewm = 1
     else:

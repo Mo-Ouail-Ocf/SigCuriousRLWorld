@@ -35,13 +35,24 @@ class RolloutBuffer:
     Accumulates T steps of experience from a single environment.
     """
 
-    def __init__(self, T: int, obs_shape: tuple, action_dim: int, device: str) -> None:
+    def __init__(
+        self,
+        T: int,
+        obs_shape: tuple,
+        action_dim: int,
+        device: str,
+        discrete: bool = False,
+    ) -> None:
         self.T = T
         self.device = device
+        self.discrete = discrete
         self.ptr = 0
         self.obs = torch.zeros(T, *obs_shape)
         self.latents = None  # allocated lazily if needed
-        self.actions = torch.zeros(T, action_dim)
+        if discrete:
+            self.actions = torch.zeros(T, dtype=torch.long)
+        else:
+            self.actions = torch.zeros(T, action_dim)
         self.log_probs = torch.zeros(T)
         self.values = torch.zeros(T)
         self.rewards = torch.zeros(T)
@@ -59,9 +70,12 @@ class RolloutBuffer:
     ) -> None:
         t = self.ptr
         self.obs[t] = obs
-        if action.dim() == 0:
-            action = action.unsqueeze(0)
-        self.actions[t] = action
+        if self.discrete:
+            self.actions[t] = action.reshape(-1)[0].long()
+        else:
+            if action.dim() == 0:
+                action = action.unsqueeze(0)
+            self.actions[t] = action
         self.log_probs[t] = log_prob
         self.values[t] = value
         self.rewards[t] = reward
@@ -159,7 +173,7 @@ class Trainer:
         # Determine action dim
         action_space = env.action_space
         if hasattr(action_space, "n"):
-            self.action_dim = 1
+            self.action_dim = action_space.n
             self.discrete = True
         else:
             self.action_dim = action_space.shape[0]
@@ -183,6 +197,7 @@ class Trainer:
             obs_shape=obs.shape,
             action_dim=self.action_dim,
             device=str(self.device),
+            discrete=self.discrete,
         )
 
         # LeWM warmup: collect random data before RL starts

@@ -250,6 +250,24 @@ class TestPPO:
         for k in ["policy_loss", "value_loss", "entropy", "approx_kl"]:
             assert k in m, f"Missing metric: {k}"
 
+    def test_ppo_update_handles_discrete_actions_with_extra_dim(self):
+        """Trainer stores discrete actions; PPO should treat them as class indices."""
+        from src.agents.ppo import LatentActorCritic, PPO
+        ac = LatentActorCritic(latent_dim=32, action_dim=4)
+        ppo = PPO(ac, lr=3e-4, n_epochs=2, batch_size=16)
+        T = 32
+        m = ppo.update(dict(
+            obs=torch.randn(T, 32),
+            actions=torch.randint(0, 4, (T, 1)),
+            log_probs=torch.randn(T),
+            values=torch.randn(T),
+            rewards=torch.randn(T),
+            dones=torch.zeros(T),
+            next_obs=torch.randn(32),
+        ))
+        for k in ["policy_loss", "value_loss", "entropy", "approx_kl"]:
+            assert np.isfinite(m[k]), f"Metric {k} should be finite, got {m[k]}"
+
     def test_ppo_update_changes_params(self):
         """PPO update must actually change the parameters."""
         from src.agents.ppo import LatentActorCritic, PPO
@@ -314,6 +332,29 @@ class TestPPO:
         )
         assert changed, "PPO did not update the shared LeWM encoder"
 
+    def test_compute_gae_respects_terminal_transitions(self):
+        """Terminal transitions must not bootstrap from the next state's value."""
+        from src.agents.ppo import LatentActorCritic, PPO
+        ac = LatentActorCritic(latent_dim=32, action_dim=4)
+        ppo = PPO(ac, gamma=0.99, gae_lambda=0.95)
+
+        rewards = torch.tensor([1.0, 2.0])
+        values = torch.tensor([0.5, 0.25])
+        dones = torch.tensor([0.0, 1.0])
+        next_value = torch.tensor(10.0)
+
+        advantages, returns = ppo.compute_gae(rewards, values, dones, next_value)
+
+        expected_last_adv = rewards[1] - values[1]
+        expected_first_adv = (
+            rewards[0] + ppo.gamma * values[1] - values[0]
+            + ppo.gamma * ppo.gae_lambda * expected_last_adv
+        )
+
+        assert torch.isclose(advantages[1], expected_last_adv)
+        assert torch.isclose(advantages[0], expected_first_adv)
+        assert torch.isclose(returns[1], rewards[1])
+
 # ---------------------------------------------------------------------------
 # ReplayBuffer Tests
 # ---------------------------------------------------------------------------
@@ -372,3 +413,35 @@ class TestConfigs:
         assert "intrinsic_reward" in s1
         assert "intrinsic_reward" not in s2
         assert "intrinsic_reward" in s3
+
+    def test_build_stage_uses_full_discrete_action_space(self, monkeypatch):
+        """Discrete PPO heads should match env.action_space.n, not a scalar action encoding."""
+        import gymnasium as gym
+        from src.training import factory
+
+        class DummyEnv:
+            observation_space = gym.spaces.Box(
+                low=0, high=255, shape=(3, 32, 32), dtype=np.uint8
+            )
+            action_space = gym.spaces.Discrete(7)
+
+            def reset(self, seed=None):
+                return np.zeros((3, 32, 32), dtype=np.uint8), {}
+
+            def step(self, action):
+                return np.zeros((3, 32, 32), dtype=np.uint8), 0.0, False, False, {}
+
+        monkeypatch.setattr(factory, "make_pixel_env", lambda **kwargs: DummyEnv())
+
+        trainer = factory.build_stage({
+            "stage": "stage1",
+            "device": "cpu",
+            "seed": 0,
+            "env": {"id": "DummyEnv-v0", "image_size": 32},
+            "agent": {"hidden_dim": 64},
+            "lewm": {"encoder_type": "cnn", "latent_dim": 32},
+            "training": {"total_steps": 8, "rollout_steps": 4},
+            "intrinsic_reward": {"lambda_int": 0.01, "normalize": True},
+        })
+
+        assert trainer.actor_critic.actor.out_features == 7

@@ -254,6 +254,16 @@ class PPO:
             return obs
         return self.obs_to_policy_input(obs)
 
+    @staticmethod
+    def _prepare_actions(
+        actions: torch.Tensor,
+        dist: Categorical | Normal,
+    ) -> torch.Tensor:
+        """Align stored rollout actions with the distribution type."""
+        if isinstance(dist, Categorical):
+            return actions.reshape(-1).long()
+        return actions.float()
+
     def compute_gae(
         self,
         rewards: torch.Tensor,
@@ -277,10 +287,10 @@ class PPO:
         gae = torch.tensor(0.0, device=rewards.device)
 
         for t in reversed(range(T)):
-            nxt_v    = next_value if t == T - 1 else values[t + 1]
-            nxt_done = torch.tensor(0.0, device=rewards.device) if t == T - 1 else dones[t + 1]
-            delta    = rewards[t] + self.gamma * nxt_v * (1 - nxt_done) - values[t]
-            gae      = delta + self.gamma * self.gae_lambda * (1 - nxt_done) * gae
+            nxt_v = next_value if t == T - 1 else values[t + 1]
+            next_non_terminal = 1.0 - dones[t]
+            delta = rewards[t] + self.gamma * nxt_v * next_non_terminal - values[t]
+            gae = delta + self.gamma * self.gae_lambda * next_non_terminal * gae
             advantages[t] = gae
 
         return advantages, advantages + values
@@ -333,7 +343,8 @@ class PPO:
                 policy_input = self._prepare_policy_input(obs[idx])
                 dist, values = self.actor_critic(policy_input)
 
-                log_probs = dist.log_prob(actions[idx])
+                batch_actions = self._prepare_actions(actions[idx], dist)
+                log_probs = dist.log_prob(batch_actions)
                 if log_probs.dim() > 1:
                     log_probs = log_probs.sum(-1)
                 entropy = dist.entropy()
